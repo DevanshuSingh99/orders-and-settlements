@@ -1,0 +1,39 @@
+{
+  "name": "@oas/gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "API gateway: single public entry point. Verifies JWTs, rate limits, attaches request ids, and proxies to auth/orders/payments services. Every downstream service independently re-verifies the JWT rather than trusting this layer alone.",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "APP_ENV=dev ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "jest --runInBand",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@oas/shared-domain": "file:../packages/shared-domain",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "http-proxy-middleware": "^3.0.3",
+    "ioredis": "^5.4.2",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.2",
+    "@types/supertest": "^6.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.7.2"
+  }
+}
