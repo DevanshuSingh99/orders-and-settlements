@@ -1,0 +1,10 @@
+process.env.LOG_LEVEL = 'silent';
+process.env.TEST_RUNNER_ENABLED = 'true';
+process.env.TEST_RUNNER_USER = 'runner';
+process.env.TEST_RUNNER_PASSWORD = 'runner-password';
+process.env.TEST_RUNNER_JWT_SECRET = 'test-runner-jwt-secret-32bytes!!';
+process.env.PUBLIC_API_BASE_URL = 'http://localhost:4000';
+process.env.DATABASE_URL = 'postgres://oas_app:oas_app_password@localhost:5432/oas';
+process.env.REDIS_URL = 'redis://localhost:6379';
+process.env.TEST_RUNNER_PORT = '4004';
+process.env.CORS_ORIGINS = 'http://localhost:3001';

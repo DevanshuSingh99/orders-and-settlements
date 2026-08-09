@@ -1,0 +1,29 @@
+/* Tailwind CSS v4 must be imported first, HeroUI's styles after it. */
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/*
+ * Same finance-tool palette as web/: neutral grayscale with one muted
+ * slate accent. No gradients, heavy shadows, or flashy animation.
+ */
+:root {
+  --background: #fafafa;
+  --foreground: #18181b;
+
+  --accent: oklch(0.32 0.01 260);
+  --accent-foreground: oklch(0.98 0 0);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
