@@ -1,0 +1,172 @@
+# Production deployment on the Oracle VM.
+#
+# This is a SEPARATE, standalone compose file rather than an overlay on
+# docker-compose.yml, on purpose: it deliberately does NOT define
+# `postgres` or `redis` services, since those already run on the VM
+# outside Docker Compose. Keeping two explicit files is simpler to reason
+# about than fighting Compose's merge/profile semantics to conditionally
+# exclude services - see docs/implementation-plan.md section 5.
+#
+# Point env/.env.prod's DATABASE_URL/REDIS_URL at wherever your existing
+# Postgres/Redis actually listen. `host.docker.internal` (mapped below via
+# extra_hosts) is a reasonable default if they run directly on the VM host;
+# if they instead run in their own Docker network, connect this project's
+# network to that one and use its service name instead.
+#
+# Usage: `make deploy` (see Makefile), or:
+#   docker compose -f docker-compose.prod.yml up -d --build
+services:
+  migrate-auth:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    env_file: ./env/.env.prod
+    environment:
+      APP_ENV: prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["node", "dist/db/migrate.js"]
+
+  migrate-orders:
+    build:
+      context: .
+      dockerfile: services/orders-service/Dockerfile
+    env_file: ./env/.env.prod
+    environment:
+      APP_ENV: prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["node", "dist/db/migrate.js"]
+
+  migrate-payments:
+    build:
+      context: .
+      dockerfile: services/payments-service/Dockerfile
+    env_file: ./env/.env.prod
+    environment:
+      APP_ENV: prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["node", "dist/db/migrate.js"]
+    depends_on:
+      migrate-orders:
+        condition: service_completed_successfully
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.prod
+    environment:
+      APP_ENV: prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      migrate-auth:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orders-service:
+    build:
+      context: .
+      dockerfile: services/orders-service/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.prod
+    environment:
+      APP_ENV: prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      migrate-orders:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  payments-service:
+    build:
+      context: .
+      dockerfile: services/payments-service/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.prod
+    environment:
+      APP_ENV: prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      migrate-payments:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.prod
+    environment:
+      APP_ENV: prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      orders-service:
+        condition: service_healthy
+      payments-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  test-runner-service:
+    build:
+      context: .
+      dockerfile: services/test-runner-service/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.prod
+    environment:
+      APP_ENV: prod
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      gateway:
+        condition: service_healthy
+      test-runner-service:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

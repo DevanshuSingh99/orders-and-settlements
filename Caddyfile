@@ -1,0 +1,29 @@
+# Caddy terminates TLS for the API and reverse-proxies to the gateway
+# container. Caddy automatically obtains and renews a Let's Encrypt
+# certificate for the domain below - replace it with your real domain
+# (must already point at this VM's public IP) before deploying.
+#
+# See docs/implementation-plan.md section 37 (AWS/VM Deployment).
+api.example.com {
+	reverse_proxy gateway:4000
+
+	encode gzip
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Browser test dashboard hits this host for suites + server-side load runs.
+# Keep TEST_RUNNER_ENABLED=false in production unless you intentionally expose it.
+test-api.example.com {
+	reverse_proxy test-runner-service:4004
+
+	encode gzip
+
+	log {
+		output stdout
+		format json
+	}
+}

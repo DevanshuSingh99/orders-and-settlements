@@ -1,0 +1,36 @@
+/* Tailwind CSS v4 must be imported first, HeroUI's styles after it. */
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/*
+ * This is finance software: a small, neutral, mostly-grayscale palette
+ * with one muted accent color, used sparingly. No gradients, no heavy
+ * shadows, no flashy animation - see docs/implementation-plan.md section 9.
+ */
+:root {
+  --background: #fafafa;
+  --foreground: #18181b;
+
+  /* HeroUI theme tokens: swap the library's default bright blue accent for
+   * a near-black slate tone, matching the plain, finance-tool look
+   * described in docs/implementation-plan.md section 9 ("minimal, light,
+   * finance-tool look... one muted accent"). Success/danger stay close to
+   * their defaults since red/green already read correctly for status.
+   */
+  --accent: oklch(0.32 0.01 260);
+  --accent-foreground: oklch(0.98 0 0);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}

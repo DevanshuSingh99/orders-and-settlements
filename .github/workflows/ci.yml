@@ -1,0 +1,171 @@
+name: CI
+
+# Runs on every push and pull request: install, lint, typecheck, unit and
+# integration tests (against real Postgres/Redis service containers), and
+# a production build for every service and the frontend - see
+# docs/implementation-plan.md section 38.
+#
+# The backend runs as ONE job (not a matrix) against a single shared
+# Postgres: payments-service's tests write test orders directly into
+# orders.orders (see services/payments-service/tests/testOrders.ts), so
+# orders-service's migrations must have already run against the same
+# database - a matrix with per-job isolated databases would break that.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  backend:
+    name: Backend (shared-domain, auth, orders, payments, gateway)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oas_app
+          POSTGRES_PASSWORD: oas_app_password
+          POSTGRES_DB: oas
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U oas_app -d oas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://oas_app:oas_app_password@localhost:5432/oas
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret-please-change-in-real-envs
+      JWT_ACCESS_TTL: 15m
+      REFRESH_TTL_DAYS: "30"
+      CORS_ORIGINS: http://localhost:3000
+      AUTH_SERVICE_URL: http://localhost:4001
+      ORDERS_SERVICE_URL: http://localhost:4002
+      PAYMENTS_SERVICE_URL: http://localhost:4003
+      RATE_LIMIT_WINDOW_MS: "60000"
+      RATE_LIMIT_MAX: "120"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # shared-domain first: every service depends on its built dist/ output.
+      - name: shared-domain - install
+        working-directory: packages/shared-domain
+        run: npm install
+      - name: shared-domain - typecheck
+        working-directory: packages/shared-domain
+        run: npm run typecheck
+      - name: shared-domain - unit tests
+        working-directory: packages/shared-domain
+        run: npm test
+      - name: shared-domain - build
+        working-directory: packages/shared-domain
+        run: npm run build
+
+      - name: auth-service - install
+        working-directory: services/auth-service
+        run: npm install
+      - name: auth-service - lint
+        working-directory: services/auth-service
+        run: npm run lint --if-present
+      - name: auth-service - typecheck
+        working-directory: services/auth-service
+        run: npm run typecheck
+      - name: auth-service - migrate
+        working-directory: services/auth-service
+        run: npm run migrate
+      - name: auth-service - test
+        working-directory: services/auth-service
+        run: npm test
+      - name: auth-service - build
+        working-directory: services/auth-service
+        run: npm run build
+
+      - name: orders-service - install
+        working-directory: services/orders-service
+        run: npm install
+      - name: orders-service - lint
+        working-directory: services/orders-service
+        run: npm run lint --if-present
+      - name: orders-service - typecheck
+        working-directory: services/orders-service
+        run: npm run typecheck
+      - name: orders-service - migrate
+        working-directory: services/orders-service
+        run: npm run migrate
+      - name: orders-service - test
+        working-directory: services/orders-service
+        run: npm test
+      - name: orders-service - build
+        working-directory: services/orders-service
+        run: npm run build
+
+      # payments-service's tests insert directly into orders.orders, so
+      # orders-service's migrations (just above) must run first.
+      - name: payments-service - install
+        working-directory: services/payments-service
+        run: npm install
+      - name: payments-service - lint
+        working-directory: services/payments-service
+        run: npm run lint --if-present
+      - name: payments-service - typecheck
+        working-directory: services/payments-service
+        run: npm run typecheck
+      - name: payments-service - migrate
+        working-directory: services/payments-service
+        run: npm run migrate
+      - name: payments-service - test
+        working-directory: services/payments-service
+        run: npm test
+      - name: payments-service - build
+        working-directory: services/payments-service
+        run: npm run build
+
+      - name: gateway - install
+        working-directory: gateway
+        run: npm install
+      - name: gateway - lint
+        working-directory: gateway
+        run: npm run lint --if-present
+      - name: gateway - typecheck
+        working-directory: gateway
+        run: npm run typecheck
+      - name: gateway - test
+        working-directory: gateway
+        run: npm test
+      - name: gateway - build
+        working-directory: gateway
+        run: npm run build
+
+  web:
+    name: web (lint + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install
+        working-directory: web
+        run: npm install
+      - name: Lint
+        working-directory: web
+        run: npm run lint
+      - name: Build (includes typecheck)
+        working-directory: web
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.example.com
+        run: npm run build
