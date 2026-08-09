@@ -1,0 +1,193 @@
+# Local development / CI stack.
+#
+# Brings up Postgres and Redis for local work, plus every backend service.
+# `docker-compose.prod.yml` overlays this file on the Oracle VM to swap in
+# the VM's existing Postgres/Redis and add Caddy for TLS termination - see
+# docs/implementation-plan.md section 5.
+#
+# Quick start: `make up` (or `docker compose up -d --build`).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oas_app
+      POSTGRES_PASSWORD: oas_app_password
+      POSTGRES_DB: oas
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U oas_app -d oas']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-off migration runners. Each reuses its service's already-built
+  # runtime image but runs the compiled migrate script instead of the
+  # server, then exits. Other services wait for these to finish
+  # successfully before starting, so the stack is usable the moment
+  # `docker compose up` returns - see docs/implementation-plan.md section 5.
+  migrate-auth:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    env_file: ./env/.env.dev
+    environment:
+      APP_ENV: dev
+    command: ['node', 'dist/db/migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate-orders:
+    build:
+      context: .
+      dockerfile: services/orders-service/Dockerfile
+    env_file: ./env/.env.dev
+    environment:
+      APP_ENV: dev
+    command: ['node', 'dist/db/migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate-payments:
+    build:
+      context: .
+      dockerfile: services/payments-service/Dockerfile
+    env_file: ./env/.env.dev
+    environment:
+      APP_ENV: dev
+    command: ['node', 'dist/db/migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # payments-service's schema references orders.orders, so the orders
+      # schema must exist first.
+      migrate-orders:
+        condition: service_completed_successfully
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.dev
+    environment:
+      APP_ENV: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate-auth:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4001/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orders-service:
+    build:
+      context: .
+      dockerfile: services/orders-service/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.dev
+    environment:
+      APP_ENV: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate-orders:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4002/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  payments-service:
+    build:
+      context: .
+      dockerfile: services/payments-service/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.dev
+    environment:
+      APP_ENV: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate-payments:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4003/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.dev
+    environment:
+      APP_ENV: dev
+    ports:
+      - '4000:4000'
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      orders-service:
+        condition: service_healthy
+      payments-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Browser test dashboard backend: correctness suites + server-side load.
+  # Gated by TEST_RUNNER_ENABLED / TEST_RUNNER_USER in env/.env.dev.
+  test-runner-service:
+    build:
+      context: .
+      dockerfile: services/test-runner-service/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/.env.dev
+    environment:
+      APP_ENV: dev
+    ports:
+      - '4004:4004'
+    depends_on:
+      gateway:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4004/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
