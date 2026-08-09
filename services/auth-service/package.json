@@ -1,0 +1,46 @@
+{
+  "name": "@oas/auth-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Authentication service: registration, login, refresh, logout, and session lookup. Owns the auth Postgres schema and issues JWTs verified by every other service.",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "APP_ENV=dev ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "migrate": "ts-node src/db/migrate.ts",
+    "test": "jest --runInBand",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@oas/shared-domain": "file:../../packages/shared-domain",
+    "argon2": "^0.41.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2",
+    "pg": "^8.13.1",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "uuid": "^11.0.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/supertest": "^6.0.2",
+    "@types/uuid": "^10.0.0",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.7.2"
+  }
+}
