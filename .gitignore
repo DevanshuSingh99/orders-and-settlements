@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Build output
+dist/
+build/
+out/
+.next/
+
+# Environment files - NEVER commit real secrets. Only .env.example files are tracked.
+env/.env
+env/.env.dev
+env/.env.prod
+**/env/.env
+**/env/.env.dev
+**/env/.env.prod
+!**/env/.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test / coverage
+coverage/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Docker
+docker-compose.override.yml
+
+# Misc
+*.tsbuildinfo
