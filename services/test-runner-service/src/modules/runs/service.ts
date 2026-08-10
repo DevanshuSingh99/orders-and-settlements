@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { getScenarios } from '@oas/test-scenarios';
 import { cleanupUsers } from '../../engine/cleanup';
-import { createRunUsers, executeScenario, type StepResult } from '../../engine/scenarioExecutor';
+import { createRunUsers, executeScenario, type ScenarioResult, type StepResult } from '../../engine/scenarioExecutor';
 import {
   appendEvent,
   getRun,
@@ -14,11 +14,13 @@ import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 
 /** Map executor step results to the wire shape consumed by test-web. */
-function toWireStep(step: StepResult): Record<string, unknown> {
+export function toWireStep(step: StepResult): Record<string, unknown> {
   return {
     name: step.name,
     kind: step.kind,
+    // Send both so live UI and snapshot hydration stay compatible.
     status: step.passed ? ('passed' as const) : ('failed' as const),
+    passed: step.passed,
     durationMs: step.durationMs,
     request: step.request,
     response: step.response,
@@ -27,6 +29,19 @@ function toWireStep(step: StepResult): Record<string, unknown> {
     phase: step.phase,
     parallelSummary: step.parallelSummary,
     children: step.children?.map(toWireStep),
+  };
+}
+
+function toWireScenario(result: ScenarioResult) {
+  return {
+    id: result.id,
+    suite: result.suite,
+    title: result.title,
+    rule: result.rule,
+    passed: result.passed,
+    durationMs: result.durationMs,
+    error: result.error,
+    steps: result.steps.map(toWireStep),
   };
 }
 
@@ -128,10 +143,14 @@ async function executeSuiteRun(runId: string, suites?: string[]): Promise<void> 
         scenarioId: scenario.id,
         status: result.passed ? 'passed' : 'failed',
         durationMs: result.durationMs,
+        // Full step tree (incl. parallel children) so the UI can render race details
+        // even if an earlier step.finished frame was thin or missed.
+        steps: result.steps.map(toWireStep),
       });
 
       const current = (await getRun(runId)) as SuiteRunRecord;
-      current.scenarios.push(result);
+      // Store wire-shaped steps so run.snapshot already has parallel children.
+      current.scenarios.push(toWireScenario(result) as unknown as ScenarioResult);
       await saveRun(current);
     }
 

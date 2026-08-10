@@ -149,6 +149,12 @@ function ParallelDetail({ step }: { step: StepResult }) {
             {countsMatch ? " (guard held)" : " (unexpected)"}
           </p>
         </section>
+      ) : raceChildren.length === 0 ? (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          This parallel step passed, but attempt details were not included in the stream. Rebuild and
+          restart <span className="font-mono">test-runner-service</span>, then re-run the suite to see
+          which payment was accepted vs rejected.
+        </p>
       ) : (
         <p className="text-sm text-zinc-600">
           Parallel step — expand each attempt below to see which API calls were accepted or rejected.
@@ -181,8 +187,29 @@ function ParallelDetail({ step }: { step: StepResult }) {
 }
 
 export function StepDetail({ step }: { step: StepResult }) {
-  if (step.kind === "parallel" || step.parallelSummary || (step.children && step.children.length > 0)) {
+  const isParallel =
+    step.kind === "parallel" ||
+    Boolean(step.parallelSummary) ||
+    Boolean(step.children && step.children.length > 0);
+
+  if (isParallel) {
     return <ParallelDetail step={step} />;
+  }
+
+  const hasHttpDetail = Boolean(
+    step.request || step.response || (step.assertions && step.assertions.length > 0) || step.error,
+  );
+
+  if (!hasHttpDetail) {
+    return (
+      <div className="mt-3 space-y-2 border-t border-zinc-100 pt-3">
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          No request/response details were streamed for this step. Concurrent race steps need a rebuilt
+          test-runner that includes parallel attempt payloads — rebuild/restart{" "}
+          <span className="font-mono">test-runner-service</span> and re-run the suite.
+        </p>
+      </div>
+    );
   }
 
   return (

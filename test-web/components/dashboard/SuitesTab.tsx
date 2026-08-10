@@ -62,6 +62,31 @@ function ensureScenario(
   return scenario;
 }
 
+/** Normalize runner step payloads (`passed` vs `status`, nested parallel children). */
+function normalizeWireStep(raw: StepResult & { passed?: boolean }): StepResult {
+  const status =
+    raw.status ?? (raw.passed === false ? "failed" : raw.passed === true ? "passed" : "failed");
+  return {
+    ...raw,
+    status,
+    children: raw.children?.map((child) =>
+      normalizeWireStep(child as StepResult & { passed?: boolean }),
+    ),
+  };
+}
+
+function applyLiveSteps(scenario: LiveScenario, steps: StepResult[]) {
+  scenario.steps = steps.map((raw, index) => {
+    const wireStep = normalizeWireStep(raw as StepResult & { passed?: boolean });
+    return {
+      index,
+      name: wireStep.name,
+      status: wireStep.status,
+      result: wireStep,
+    };
+  });
+}
+
 /** Normalize legacy/alternate SSE field names so live tree ids stay defined. */
 function eventSuiteId(event: SuiteStreamEvent): string | undefined {
   const raw = event as {
@@ -152,20 +177,17 @@ function applyEvent(
       const suite = ensureSuite(map, suiteId, catalogue);
       const scenario = ensureScenario(suite, scenarioId, catalogue);
       const stepIndex = event.stepIndex ?? scenario.steps.length;
-      const rawStep = event.step as StepResult & { passed?: boolean };
-      const stepStatus =
-        rawStep.status ?? (rawStep.passed === false ? "failed" : rawStep.passed === true ? "passed" : "failed");
-      const wireStep: StepResult = { ...event.step, status: stepStatus };
+      const wireStep = normalizeWireStep(event.step as StepResult & { passed?: boolean });
       const existing = scenario.steps.find((s) => s.index === stepIndex);
       if (existing) {
-        existing.status = stepStatus;
+        existing.status = wireStep.status;
         existing.name = wireStep.name || existing.name;
         existing.result = wireStep;
       } else {
         scenario.steps.push({
           index: stepIndex,
           name: wireStep.name,
-          status: stepStatus,
+          status: wireStep.status,
           result: wireStep,
         });
         scenario.steps.sort((a, b) => a.index - b.index);
@@ -175,6 +197,7 @@ function applyEvent(
     case "scenario.finished": {
       const raw = event as SuiteStreamEvent & {
         scenario?: { id?: string; suite?: string; passed?: boolean; durationMs?: number };
+        steps?: StepResult[];
       };
       const suiteId = eventSuiteId(event) ?? raw.scenario?.suite;
       const scenarioId = eventScenarioId(event);
@@ -187,6 +210,10 @@ function applyEvent(
       } else {
         scenario.status = event.status;
         scenario.durationMs = event.durationMs;
+      }
+      // Prefer full step tree from scenario.finished (includes parallel children).
+      if (Array.isArray(raw.steps) && raw.steps.length > 0) {
+        applyLiveSteps(scenario, raw.steps);
       }
       break;
     }
@@ -234,12 +261,15 @@ function suitesFromSnapshot(run: SuiteRunSnapshot, catalogue: SuiteInfo[]): Live
       rule: scenario.rule,
       status: scenario.passed ? "passed" : "failed",
       durationMs: scenario.durationMs,
-      steps: (scenario.steps ?? []).map((step, index) => ({
-        index,
-        name: step.name,
-        status: step.status === "passed" ? "passed" : "failed",
-        result: step,
-      })),
+      steps: (scenario.steps ?? []).map((step, index) => {
+        const wireStep = normalizeWireStep(step as StepResult & { passed?: boolean });
+        return {
+          index,
+          name: wireStep.name,
+          status: wireStep.status,
+          result: wireStep,
+        };
+      }),
     });
   }
   return Array.from(bySuite.values());

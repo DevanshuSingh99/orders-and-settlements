@@ -128,6 +128,8 @@ export type SuiteStreamEvent =
       scenarioId: string;
       status: "passed" | "failed" | "skipped";
       durationMs: number;
+      /** Full step results including parallel children (when sent by the runner). */
+      steps?: StepResult[];
     }
   | { type: "run.finished"; status: "passed" | "failed"; summary: RunSummary }
   | { type: "run.error"; message: string };
