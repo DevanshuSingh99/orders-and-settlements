@@ -12,7 +12,7 @@ Design notes from before implementation: [docs/implementation-plan.md](docs/impl
 
 ## Why microservices
 
-Split into small services so each piece can scale and deploy on its own, and a failure in one area doesn’t take down the whole system, not one single point of failure / blast radius for the whole app.
+Split into small services so each piece can scale and deploy on its own, and a failure in one area doesn’t take down the whole system, not one single point of failure / blast radius for the whole app. 
 
 Gateway is the public entry: auth, orders, and payments stay separate behind it. Each service owns its schema and re-verifies JWTs itself (doesn’t trust the gateway alone).
 
