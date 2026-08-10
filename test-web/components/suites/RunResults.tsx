@@ -95,7 +95,12 @@ function StepRow({ step }: { step: LiveStep }) {
       >
         <div className="min-w-0">
           <p className="truncate text-sm text-zinc-800">{step.name}</p>
-          {step.result ? (
+          {step.result?.parallelSummary ? (
+            <p className="text-xs text-zinc-500">
+              {step.result.parallelSummary.successCount} accepted /{" "}
+              {step.result.parallelSummary.failureCount} rejected · {formatMs(step.result.durationMs)}
+            </p>
+          ) : step.result ? (
             <p className="text-xs text-zinc-500">{formatMs(step.result.durationMs)}</p>
           ) : null}
         </div>

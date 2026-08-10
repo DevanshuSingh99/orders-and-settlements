@@ -30,7 +30,14 @@ export interface StepResult {
   assertions?: AssertionResult[];
   error?: string;
   children?: StepResult[];
-  parallelSummary?: { successCount: number; failureCount: number; expectedSuccess: number; expectedFailure: number };
+  /** Concurrent race attempts vs follow-up checks after the race. */
+  phase?: 'concurrent' | 'after';
+  parallelSummary?: {
+    successCount: number;
+    failureCount: number;
+    expectedSuccess: number;
+    expectedFailure: number;
+  };
 }
 
 export interface ScenarioResult {
@@ -153,7 +160,10 @@ async function executeParallelStep(
     kind: 'parallel',
     passed,
     durationMs: Date.now() - started,
-    children: [...children, ...afterResults],
+    children: [
+      ...children.map((c) => ({ ...c, phase: 'concurrent' as const })),
+      ...afterResults.map((c) => ({ ...c, phase: 'after' as const })),
+    ],
     parallelSummary: {
       successCount,
       failureCount,

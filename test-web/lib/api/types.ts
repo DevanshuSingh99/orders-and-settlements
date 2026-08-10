@@ -36,10 +36,20 @@ export interface AssertionResult {
   passed: boolean;
 }
 
+export interface ParallelSummary {
+  successCount: number;
+  failureCount: number;
+  expectedSuccess: number;
+  expectedFailure: number;
+}
+
 export interface StepResult {
   name: string;
   status: "passed" | "failed";
   durationMs: number;
+  kind?: "http" | "parallel";
+  /** Concurrent race attempt vs post-race follow-up (parallel children only). */
+  phase?: "concurrent" | "after";
   request?: {
     method: string;
     path: string;
@@ -52,6 +62,8 @@ export interface StepResult {
   };
   assertions?: AssertionResult[];
   error?: string;
+  children?: StepResult[];
+  parallelSummary?: ParallelSummary;
 }
 
 export interface RunSummary {

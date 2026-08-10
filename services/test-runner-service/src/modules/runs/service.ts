@@ -14,15 +14,19 @@ import { env } from '../../config/env';
 import { logger } from '../../config/logger';
 
 /** Map executor step results to the wire shape consumed by test-web. */
-function toWireStep(step: StepResult) {
+function toWireStep(step: StepResult): Record<string, unknown> {
   return {
     name: step.name,
+    kind: step.kind,
     status: step.passed ? ('passed' as const) : ('failed' as const),
     durationMs: step.durationMs,
     request: step.request,
     response: step.response,
     assertions: step.assertions,
     error: step.error,
+    phase: step.phase,
+    parallelSummary: step.parallelSummary,
+    children: step.children?.map(toWireStep),
   };
 }
 
