@@ -1,4 +1,4 @@
-.PHONY: up down logs ps build test seed migrate deploy
+.PHONY: up down logs ps build test seed migrate deploy deploy-prod
 
 # Local development / CI: build and start every service, wait for health.
 up:
@@ -33,8 +33,10 @@ migrate:
 	cd services/orders-service && npm run migrate
 	cd services/payments-service && npm run migrate
 
-# Production deploy on the VM: uses the VM's existing Redis/Postgres.
-# Nginx runs on the VM for TLS/reverse proxying. See docker-compose.prod.yml
-# and the Deployment section of the README for required env values.
+# Production deploy on the VM: starts the isolated Postgres/Redis stack,
+# applies migrations, and starts all backend services.
 deploy:
-	docker compose -f docker-compose.prod.yml up -d --build
+	bash scripts/deploy-prod.sh
+
+deploy-prod:
+	bash scripts/deploy-prod.sh --seed
