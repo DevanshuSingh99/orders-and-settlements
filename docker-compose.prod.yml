@@ -1,17 +1,12 @@
 # Production deployment on the Oracle VM.
 #
-# This is a SEPARATE, standalone compose file rather than an overlay on
-# docker-compose.yml, on purpose: it deliberately does NOT define
-# `postgres` or `redis` services, since those already run on the VM
-# outside Docker Compose. Keeping two explicit files is simpler to reason
-# about than fighting Compose's merge/profile semantics to conditionally
-# exclude services - see docs/implementation-plan.md section 5.
+# This is a standalone production stack. Its PostgreSQL and Redis services
+# are intentionally isolated from any other applications on the VM.
 #
-# Point env/.env.prod's DATABASE_URL/REDIS_URL at wherever your existing
-# Postgres/Redis actually listen. `host.docker.internal` (mapped below via
-# extra_hosts) is a reasonable default if they run directly on the VM host;
-# if they instead run in their own Docker network, connect this project's
-# network to that one and use its service name instead.
+# Configure env/.env.prod with POSTGRES_USER, POSTGRES_PASSWORD, and
+# POSTGRES_DB for the isolated database, then use the Compose service names:
+# DATABASE_URL=postgres://...@postgres:5432/...
+# REDIS_URL=redis://redis:6379
 #
 # Database migrations are intentionally not Compose services in production.
 # Apply them separately as an explicit release operation when the database
@@ -21,6 +16,30 @@
 # Usage: `make deploy` (see Makefile), or:
 #   docker compose -f docker-compose.prod.yml up -d --build
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: ./env/.env.prod
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   auth-service:
     build:
       context: .
@@ -31,6 +50,11 @@ services:
       APP_ENV: prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4051/health"]
       interval: 10s
@@ -47,6 +71,9 @@ services:
       APP_ENV: prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4052/health"]
       interval: 10s
@@ -63,6 +90,9 @@ services:
       APP_ENV: prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4053/health"]
       interval: 10s
@@ -82,6 +112,8 @@ services:
     ports:
       - "127.0.0.1:4050:4050"
     depends_on:
+      redis:
+        condition: service_healthy
       auth-service:
         condition: service_healthy
       orders-service:
@@ -107,6 +139,10 @@ services:
     ports:
       - "127.0.0.1:4054:4054"
     depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       gateway:
         condition: service_healthy
     healthcheck:
@@ -114,4 +150,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
 
