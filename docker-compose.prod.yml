@@ -13,45 +13,14 @@
 # if they instead run in their own Docker network, connect this project's
 # network to that one and use its service name instead.
 #
+# Database migrations are intentionally not Compose services in production.
+# Apply them separately as an explicit release operation when the database
+# schema is new or migrations have changed. Nginx on the VM terminates TLS
+# and proxies to the published gateway/test-runner loopback ports.
+#
 # Usage: `make deploy` (see Makefile), or:
 #   docker compose -f docker-compose.prod.yml up -d --build
 services:
-  migrate-auth:
-    build:
-      context: .
-      dockerfile: services/auth-service/Dockerfile
-    env_file: ./env/.env.prod
-    environment:
-      APP_ENV: prod
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["node", "dist/db/migrate.js"]
-
-  migrate-orders:
-    build:
-      context: .
-      dockerfile: services/orders-service/Dockerfile
-    env_file: ./env/.env.prod
-    environment:
-      APP_ENV: prod
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["node", "dist/db/migrate.js"]
-
-  migrate-payments:
-    build:
-      context: .
-      dockerfile: services/payments-service/Dockerfile
-    env_file: ./env/.env.prod
-    environment:
-      APP_ENV: prod
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["node", "dist/db/migrate.js"]
-    depends_on:
-      migrate-orders:
-        condition: service_completed_successfully
-
   auth-service:
     build:
       context: .
@@ -62,11 +31,8 @@ services:
       APP_ENV: prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      migrate-auth:
-        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4001/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4051/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -81,11 +47,8 @@ services:
       APP_ENV: prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      migrate-orders:
-        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4002/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4052/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -100,11 +63,8 @@ services:
       APP_ENV: prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      migrate-payments:
-        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4003/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4053/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -119,6 +79,8 @@ services:
       APP_ENV: prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:4050:4050"
     depends_on:
       auth-service:
         condition: service_healthy
@@ -127,7 +89,7 @@ services:
       payments-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4050/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -142,31 +104,14 @@ services:
       APP_ENV: prod
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:4054:4054"
     depends_on:
       gateway:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4004/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4054/health"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      gateway:
-        condition: service_healthy
-      test-runner-service:
-        condition: service_healthy
-
-volumes:
-  caddy_data:
-  caddy_config:
